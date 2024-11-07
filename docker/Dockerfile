@@ -3,6 +3,7 @@ FROM nvcr.io/nvidia/pytorch:${DLFW_VERSION}-py3
 
 RUN pip install parameterized
 
+ENV SCDLTUT_VERSION=0.1
 RUN cd /opt && git clone -b tkurth/attention-dbg https://github.com/azrael417/sc24-dl-tutorial.git
 ENV PYTHONPATH=${PYTHONPATH}:/opt/sc24-dl-tutorial
 

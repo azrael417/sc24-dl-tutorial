@@ -169,7 +169,7 @@ class DistributedAttention(nn.Module):
         self.head_dim = dim // self.num_heads
         self.scale = (dim // self.num_heads) ** -0.5
         self.fused_attn = False
-        self.fused_gather = False
+        self.fused_gather = True
 
         self.comm_tp_name = comm_tp_name
         self.comm_cp_name = comm_cp_name
