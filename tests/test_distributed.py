@@ -223,6 +223,7 @@ class TestDistributed(unittest.TestCase):
         [4, 1024, 2048, 8, 1e-4],
         [4, 4096, 2048, 8, 1e-4],
         [4, 4050, 2048, 8, 1e-4],
+        [4, 4050, 2048, 1, 1e-4],
     ])
     def test_distributed_attention(self, batch, seq, embed, num_heads, tolerance):
         # set the ops
