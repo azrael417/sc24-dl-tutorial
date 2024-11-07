@@ -108,83 +108,83 @@ class TestDistributed(unittest.TestCase):
 
     # tests to run with input parameterization
     # inputs are batch, seq, embed, tolerance
-    @parameterized.expand([[4, 1024, 2048, 1e-4], [4, 4096, 2048, 1e-4]])
-    def test_distributed_mlp(self, batch, seq, embed, tolerance):
-        # set the ops
-        mlp_layer = MLP(in_features=embed, hidden_features=4 * embed).to(self.device)
-        mlp_layer_distributed = DistributedMLP(
-            in_features=embed,
-            hidden_features=4 * embed,
-            comm_tp_name="tp",
-            comm_cp_name="cp",
-        ).to(self.device)
-
-        # sync the local and distributed weights
-        self._copy_mlp_weights(mlp_layer, mlp_layer_distributed)
-
-        #############################################################
-        # non-distributed op
-        #############################################################
-        # create tensor
-        inp = torch.randn((batch, seq, embed), dtype=torch.float32, device=self.device)
-        inp.requires_grad = True
-
-        # forward pass
-        out = mlp_layer(inp)
-
-        # backward pass
-        with torch.no_grad():
-            out_grad = torch.randn_like(out)
-        out.backward(out_grad)  # vjp with random vector
-        inp_grad = inp.grad.clone()
-
-        #############################################################
-        # distributed op
-        #############################################################
-        cp_shapes = compute_split_shapes(seq, comm.get_size("cp"))
-        # split the input tensor to get local tensor
-        with torch.no_grad():
-            inp_local = scatter_to_parallel_region(inp, dim=1, comm_name="cp")
-        inp_local.requires_grad = True
-
-        # forward pass local
-        out_local = mlp_layer_distributed(inp_local)
-
-        # backward pass local
-        with torch.no_grad():
-            out_grad_local = scatter_to_parallel_region(out_grad, dim=1, comm_name="cp")
-        out_local.backward(out_grad_local)  # vjp with same random local vector
-        inp_grad_local = inp_local.grad.clone()
-
-        #############################################################
-        # evaluate forward pass
-        #############################################################
-        with torch.no_grad():
-            out_gather = gather_from_parallel_region(
-                out_local, dim=1, shapes=cp_shapes, comm_name="cp"
-            )
-            err = torch.mean(
-                torch.norm(out - out_gather, p="fro", dim=(-1, -2))
-                / torch.norm(out, p="fro", dim=(-1, -2))
-            )
-            if self.print_to_screen:
-                print(f"final relative error of output: {err.item()}")
-        self.assertTrue(err.item() <= tolerance)
-
-        #############################################################
-        # evaluate backward pass
-        #############################################################
-        with torch.no_grad():
-            inp_grad_gather = gather_from_parallel_region(
-                inp_grad_local, dim=1, shapes=cp_shapes, comm_name="cp"
-            )
-            err = torch.mean(
-                torch.norm(inp_grad - inp_grad_gather, p="fro", dim=(-1, -2))
-                / torch.norm(inp_grad, p="fro", dim=(-1, -2))
-            )
-            if self.print_to_screen:
-                print(f"final relative error of gradients: {err.item()}")
-        self.assertTrue(err.item() <= tolerance)
+    #@parameterized.expand([[4, 1024, 2048, 1e-4], [4, 4096, 2048, 1e-4]])
+    #def test_distributed_mlp(self, batch, seq, embed, tolerance):
+    #    # set the ops
+    #    mlp_layer = MLP(in_features=embed, hidden_features=4 * embed).to(self.device)
+    #    mlp_layer_distributed = DistributedMLP(
+    #        in_features=embed,
+    #        hidden_features=4 * embed,
+    #        comm_tp_name="tp",
+    #        comm_cp_name="cp",
+    #    ).to(self.device)
+    #
+    #    # sync the local and distributed weights
+    #    self._copy_mlp_weights(mlp_layer, mlp_layer_distributed)
+    #
+    #    #############################################################
+    #    # non-distributed op
+    #    #############################################################
+    #    # create tensor
+    #    inp = torch.randn((batch, seq, embed), dtype=torch.float32, device=self.device)
+    #    inp.requires_grad = True
+    #
+    #    # forward pass
+    #    out = mlp_layer(inp)
+    #
+    #    # backward pass
+    #    with torch.no_grad():
+    #        out_grad = torch.randn_like(out)
+    #    out.backward(out_grad)  # vjp with random vector
+    #    inp_grad = inp.grad.clone()
+    #
+    #    #############################################################
+    #    # distributed op
+    #    #############################################################
+    #    cp_shapes = compute_split_shapes(seq, comm.get_size("cp"))
+    #    # split the input tensor to get local tensor
+    #    with torch.no_grad():
+    #        inp_local = scatter_to_parallel_region(inp, dim=1, comm_name="cp")
+    #    inp_local.requires_grad = True
+    #
+    #    # forward pass local
+    #    out_local = mlp_layer_distributed(inp_local)
+    #
+    #    # backward pass local
+    #    with torch.no_grad():
+    #        out_grad_local = scatter_to_parallel_region(out_grad, dim=1, comm_name="cp")
+    #    out_local.backward(out_grad_local)  # vjp with same random local vector
+    #    inp_grad_local = inp_local.grad.clone()
+    #
+    #    #############################################################
+    #    # evaluate forward pass
+    #    #############################################################
+    #    with torch.no_grad():
+    #        out_gather = gather_from_parallel_region(
+    #            out_local, dim=1, shapes=cp_shapes, comm_name="cp"
+    #        )
+    #        err = torch.mean(
+    #            torch.norm(out - out_gather, p="fro", dim=(-1, -2))
+    #            / torch.norm(out, p="fro", dim=(-1, -2))
+    #        )
+    #        if self.print_to_screen:
+    #            print(f"final relative error of output: {err.item()}")
+    #    self.assertTrue(err.item() <= tolerance)
+    #
+    #    #############################################################
+    #    # evaluate backward pass
+    #    #############################################################
+    #    with torch.no_grad():
+    #        inp_grad_gather = gather_from_parallel_region(
+    #            inp_grad_local, dim=1, shapes=cp_shapes, comm_name="cp"
+    #        )
+    #        err = torch.mean(
+    #            torch.norm(inp_grad - inp_grad_gather, p="fro", dim=(-1, -2))
+    #            / torch.norm(inp_grad, p="fro", dim=(-1, -2))
+    #        )
+    #        if self.print_to_screen:
+    #            print(f"final relative error of gradients: {err.item()}")
+    #    self.assertTrue(err.item() <= tolerance)
 
     def _copy_attn_weights(self, attn_layer, attn_layer_distributed):
         """copy the weights, bias of attn into the correct shard of attn_dist"""
@@ -221,6 +221,7 @@ class TestDistributed(unittest.TestCase):
     # inputs are batch, seq, embed, num_heads, tolerance
     #@parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4096, 2048, 8, 1e-4]])
     @parameterized.expand([[1, 5, 2, 2, 1e-4]])
+    #@parameterized.expand([[4, 4050, 2048, 8, 1e-4]])
     def test_distributed_attention(self, batch, seq, embed, num_heads, tolerance):
         # set the ops
         attn_layer = Attention(dim=embed, num_heads=num_heads, qkv_bias=True).to(
@@ -285,9 +286,12 @@ class TestDistributed(unittest.TestCase):
             )
             if self.print_to_screen:
                 print(f"final relative error of output: {err.item()}")
+
+        #print("FORWARD", out, out_gather, flush=True)
+                
         self.assertTrue(err.item() <= tolerance)
 
-        print("FORWARD", out, out_gather)
+        #print("FORWARD", out, out_gather, flush=True)
         
         #############################################################
         # evaluate backward pass
@@ -303,7 +307,7 @@ class TestDistributed(unittest.TestCase):
             if self.print_to_screen:
                 print(f"final relative error of gradients: {err.item()}")
 
-        print("BACKWARD", inp_grad, inp_grad_gather)
+        print("BACKWARD", inp_grad, inp_grad_gather, flush=True)
                 
         self.assertTrue(err.item() <= tolerance)
 

@@ -169,6 +169,7 @@ class DistributedAttention(nn.Module):
         self.head_dim = dim // self.num_heads
         self.scale = (dim // self.num_heads) ** -0.5
         self.fused_attn = True
+        self.fused_gather = True
 
         self.comm_tp_name = comm_tp_name
         self.comm_cp_name = comm_cp_name
@@ -206,17 +207,18 @@ class DistributedAttention(nn.Module):
         # note: N is local sequence shard if CP is on
         B, N, C = x.shape
     
-        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
-        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
-        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
 
-        #k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-        #v = all_gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-
-        k = gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-        v = gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
-        k = copy_to_parallel_region(k, comm_name=self.comm_cp_name)
-        v = copy_to_parallel_region(v, comm_name=self.comm_cp_name)
+        if self.fused_gather:
+            k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+            v = all_gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+        else:
+            k = gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+            v = gather_from_parallel_region(v, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
+            k = copy_to_parallel_region(k, comm_name=self.comm_cp_name)
+            v = copy_to_parallel_region(v, comm_name=self.comm_cp_name)
 
         if self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -233,14 +235,19 @@ class DistributedAttention(nn.Module):
             x = attn @ v
 
         # transpose back
-        x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim)
+        #x = x.contiguous()
+        x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim)#.contiguous()
 
         # this is distributed again
+        # DEBUG
         x = self.proj(x)
+        # DEBUG
 
         # generally we have to be super careful with dropout layers, since
         # those are normalized over the dropouts. That would need to be reduced across nodes
+        # DEBUG
         x = self.proj_drop(x)
+        # DEBUG
 
         return x
 
