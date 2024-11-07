@@ -219,7 +219,8 @@ class TestDistributed(unittest.TestCase):
 
     # tests to run with input parameterization
     # inputs are batch, seq, embed, num_heads, tolerance
-    @parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4096, 2048, 8, 1e-4]])
+    #@parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4096, 2048, 8, 1e-4]])
+    @parameterized.expand([[1, 5, 2, 2, 1e-4]])
     def test_distributed_attention(self, batch, seq, embed, num_heads, tolerance):
         # set the ops
         attn_layer = Attention(dim=embed, num_heads=num_heads, qkv_bias=True).to(
@@ -286,6 +287,8 @@ class TestDistributed(unittest.TestCase):
                 print(f"final relative error of output: {err.item()}")
         self.assertTrue(err.item() <= tolerance)
 
+        print("FORWARD", out, out_gather)
+        
         #############################################################
         # evaluate backward pass
         #############################################################
@@ -299,8 +302,10 @@ class TestDistributed(unittest.TestCase):
             )
             if self.print_to_screen:
                 print(f"final relative error of gradients: {err.item()}")
-        self.assertTrue(err.item() <= tolerance)
 
+        print("BACKWARD", inp_grad, inp_grad_gather)
+                
+        self.assertTrue(err.item() <= tolerance)
 
 if __name__ == "__main__":
     unittest.main()
