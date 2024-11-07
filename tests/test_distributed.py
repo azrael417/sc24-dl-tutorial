@@ -219,8 +219,11 @@ class TestDistributed(unittest.TestCase):
 
     # tests to run with input parameterization
     # inputs are batch, seq, embed, num_heads, tolerance
-    #@parameterized.expand([[4, 1024, 2048, 8, 1e-4], [4, 4096, 2048, 8, 1e-4], [4, 4050, 2048, 8, 1e-4]])
-    @parameterized.expand([[4, 4050, 2048, 8, 1e-4]])
+    @parameterized.expand([
+        [4, 1024, 2048, 8, 1e-4],
+        [4, 4096, 2048, 8, 1e-4],
+        [4, 4050, 2048, 8, 1e-4],
+    ])
     def test_distributed_attention(self, batch, seq, embed, num_heads, tolerance):
         # set the ops
         attn_layer = Attention(dim=embed, num_heads=num_heads, qkv_bias=True).to(
