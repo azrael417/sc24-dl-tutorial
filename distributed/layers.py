@@ -168,8 +168,8 @@ class DistributedAttention(nn.Module):
         self.num_heads_local = num_heads // comm.get_size(comm_tp_name)
         self.head_dim = dim // self.num_heads
         self.scale = (dim // self.num_heads) ** -0.5
-        self.fused_attn = True
-        self.fused_gather = True
+        self.fused_attn = False
+        self.fused_gather = False
 
         self.comm_tp_name = comm_tp_name
         self.comm_cp_name = comm_cp_name
@@ -202,14 +202,23 @@ class DistributedAttention(nn.Module):
             comm_act_name=comm_cp_name
         )
         self.proj_drop = nn.Dropout(proj_drop)
+        
 
-    def forward(self, x):
+    def forward(self, q, k, v):
         # note: N is local sequence shard if CP is on
-        B, N, C = x.shape
+        #B, N, C = x.shape
+
+        B, nh, N, hd = q.shape
+        assert(nh == self.num_heads)
+        assert(hd == self.head_dim)
+        C = nh * hd
     
-        q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
-        k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
-        v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        #q = self.q(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        #k = self.k(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        #v = self.v(x).reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)#.contiguous()
+        #q = x.reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+        #k = x.reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
+        #v = x.reshape(B, N, self.num_heads_local, self.head_dim).permute(0, 2, 1, 3)
 
         if self.fused_gather:
             k = all_gather_from_parallel_region(k, dim=2, shapes=self.cp_shapes, comm_name=self.comm_cp_name)
@@ -236,17 +245,17 @@ class DistributedAttention(nn.Module):
 
         # transpose back
         #x = x.contiguous()
-        x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim)#.contiguous()
+        x = x.transpose(1, 2).reshape(B, N, self.num_heads_local * self.head_dim)
 
         # this is distributed again
         # DEBUG
-        x = self.proj(x)
+        #x = self.proj(x)
         # DEBUG
 
         # generally we have to be super careful with dropout layers, since
         # those are normalized over the dropouts. That would need to be reduced across nodes
         # DEBUG
-        x = self.proj_drop(x)
+        #x = self.proj_drop(x)
         # DEBUG
 
         return x

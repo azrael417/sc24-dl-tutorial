@@ -143,7 +143,7 @@ def _reduce_scatter(input_, dim_, comm_name):
     input_ = input_.contiguous()
 
     # Split along  dimension.
-    input_list = split_tensor_along_dim(input_, dim_, comm_size)
+    input_list = [t.contiguous() for t in split_tensor_along_dim(input_, dim_, comm_size)]
 
     output = torch.empty_like(input_list[comm_rank].contiguous())
     dist.reduce_scatter(output, input_list, group=comm.get_group(comm_name))

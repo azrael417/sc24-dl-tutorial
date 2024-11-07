@@ -62,12 +62,21 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x):
-        B, N, C = x.shape
+    def forward(self, q, k, v):
+        #B, N, C = x.shape
 
-        q = self.q(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
-        k = self.k(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
-        v = self.v(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        B, nh, N, hd = q.shape
+        assert(nh == self.num_heads)
+        assert(hd == self.head_dim)
+        C = nh * hd
+        
+        #q = self.q(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        #k = self.k(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        #v = self.v(x).reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        #q = x.reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        #k = x.reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        #v = x.reshape(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         if self.fused_attn:
             x = F.scaled_dot_product_attention(
@@ -82,8 +91,8 @@ class Attention(nn.Module):
             x = attn @ v
 
         x = x.transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
+        #x = self.proj(x)
+        #x = self.proj_drop(x)
         return x
 
 class Block(nn.Module):

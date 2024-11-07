@@ -244,34 +244,50 @@ class TestDistributed(unittest.TestCase):
         # non-distributed op
         #############################################################
         # create tensor
-        inp = torch.randn((batch, seq, embed), dtype=torch.float32, device=self.device)
-        inp.requires_grad = True
+        #inp = torch.randn((batch, seq, embed), dtype=torch.float32, device=self.device)
+        #inp.requires_grad = True
+        q = torch.randn((batch, num_heads, seq, embed // num_heads), dtype=torch.float32, device=self.device)
+        q.requires_grad = True
+        k = torch.randn((batch, num_heads, seq, embed // num_heads), dtype=torch.float32, device=self.device)
+        k.requires_grad = True
+        v = torch.randn((batch, num_heads, seq, embed // num_heads), dtype=torch.float32, device=self.device)
+        v.requires_grad = True
+        #x.reshape(B, N, num_heads, ).permute(0, 2, 1, 3)
 
         # forward pass
-        out = attn_layer(inp)
+        out = attn_layer(q, k, v)
 
         # backward pass
         with torch.no_grad():
-            out_grad = torch.randn_like(out)
+            out_grad = torch.randn((batch, seq, embed), dtype=torch.float32, device=self.device)
         out.backward(out_grad)  # vjp with random vector
-        inp_grad = inp.grad.clone()
+        q_grad = q.grad.clone()
+        k_grad = k.grad.clone()
+        v_grad = v.grad.clone()
 
         #############################################################
         # distributed op
         #############################################################
         # split the input tensor to get local tensor
         with torch.no_grad():
-            inp_local = scatter_to_parallel_region(inp, dim=1, comm_name="cp")
-        inp_local.requires_grad = True
+            #inp_local = scatter_to_parallel_region(inp, dim=1, comm_name="cp")
+            q_local = scatter_to_parallel_region(q, dim=2, comm_name="cp")
+            k_local = scatter_to_parallel_region(k, dim=2, comm_name="cp")
+            v_local = scatter_to_parallel_region(v, dim=2, comm_name="cp")
+        q_local.requires_grad = True
+        k_local.requires_grad = True
+        v_local.requires_grad = True
 
         # forward pass local
-        out_local = attn_layer_distributed(inp_local)
+        out_local = attn_layer_distributed(q_local, k_local, v_local)
 
         # backward pass local
         with torch.no_grad():
             out_grad_local = scatter_to_parallel_region(out_grad, dim=1, comm_name="cp")
         out_local.backward(out_grad_local)  # vjp with same random local vector
-        inp_grad_local = inp_local.grad.clone()
+        q_grad_local = q_local.grad.clone()
+        k_grad_local = k_local.grad.clone()
+        v_grad_local = v_local.grad.clone()
 
         #############################################################
         # evaluate forward pass
@@ -290,26 +306,43 @@ class TestDistributed(unittest.TestCase):
         #print("FORWARD", out, out_gather, flush=True)
                 
         self.assertTrue(err.item() <= tolerance)
-
         #print("FORWARD", out, out_gather, flush=True)
         
         #############################################################
         # evaluate backward pass
         #############################################################
         with torch.no_grad():
-            inp_grad_gather = gather_from_parallel_region(
-                inp_grad_local, dim=1, shapes=cp_shapes, comm_name="cp"
+            q_grad_gather = gather_from_parallel_region(
+                q_grad_local, dim=2, shapes=cp_shapes, comm_name="cp"
             )
-            err = torch.mean(
-                torch.norm(inp_grad - inp_grad_gather, p="fro", dim=(-1, -2))
-                / torch.norm(inp_grad, p="fro", dim=(-1, -2))
+            k_grad_gather = gather_from_parallel_region(
+                k_grad_local, dim=2, shapes=cp_shapes, comm_name="cp"
+            )
+            v_grad_gather = gather_from_parallel_region(
+                v_grad_local, dim=2, shapes=cp_shapes, comm_name="cp"
+            )
+            err_q = torch.mean(
+                torch.norm(q_grad - q_grad_gather, p="fro", dim=(-1, -2))
+                / torch.norm(q_grad, p="fro", dim=(-1, -2))
+            )
+            err_k = torch.mean(
+                torch.norm(k_grad - k_grad_gather, p="fro", dim=(-1, -2))
+                / torch.norm(k_grad, p="fro", dim=(-1, -2))
+            )
+            err_v = torch.mean(
+                torch.norm(v_grad - v_grad_gather, p="fro", dim=(-1, -2))
+                / torch.norm(v_grad, p="fro", dim=(-1, -2))
             )
             if self.print_to_screen:
-                print(f"final relative error of gradients: {err.item()}")
+                print(f"final relative error of q-gradients: {err_q.item()}")
+                print(f"final relative error of k-gradients: {err_k.item()}")
+                print(f"final relative error of v-gradients: {err_v.item()}")
 
-        print("BACKWARD", inp_grad, inp_grad_gather, flush=True)
+        #print("BACKWARD", inp_grad, inp_grad_gather, inp_grad_local, flush=True)
                 
-        self.assertTrue(err.item() <= tolerance)
+        self.assertTrue(err_q.item() <= tolerance)
+        self.assertTrue(err_k.item() <= tolerance)
+        self.assertTrue(err_v.item() <= tolerance)
 
 if __name__ == "__main__":
     unittest.main()
